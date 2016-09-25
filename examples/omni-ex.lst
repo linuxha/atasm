@@ -1,0 +1,42 @@
+ATasm 1.06 beta (A mostly Mac65 compatible 6502 cross-assembler)
+Pass 1: Success. (0 warnings)
+Pass 2: Success. (0 warnings)
+
+Assembly successful
+  Compiled 51 bytes (~0k)
+    Block: 0600-0632 (51 bytes)
+
+Compiled to binary file 'omni-ex.com'
+
+00:06  68           PLA
+01:06  A9 04        LDA #$04
+03:06  85 D5        STA FR0+1
+05:06  A9 D2        LDA #$D2
+07:06  85 D4        STA FR0
+09:06  EA           NOP
+0A:06  60           RTS
+0B:06  68           PLA
+0C:06  A9 00        LDA #00
+0E:06  8D 09 06     STA INJECT
+11:06  60           RTS
+12:06  68           PLA
+13:06  20 01 C0     JSR $C001
+16:06  EA           NOP
+17:06  60           RTS
+18:06  68          PLA
+19:06  68          PLA
+1A:06  85 CC       STA $CC
+1C:06  68          PLA
+1D:06  85 CB       STA $CB
+1F:06  68          PLA
+20:06  85 CF       STA $CF
+22:06  68          PLA
+23:06  85 CE       STA $CE
+25:06  18          CLC
+26:06  A5 CB       LDA $CB
+28:06  65 CE       ADC $CE
+2A:06  85 D4       STA FR0	; $D4
+2C:06  A5 CC       LDA $CC
+2E:06  65 CF       ADC $CF
+30:06  85 D5       STA FR0+1	; $D5
+32:06  60          RTS
