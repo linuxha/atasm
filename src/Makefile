@@ -17,7 +17,8 @@ UNIX    = -DUNIX
 
 # Compiler flags, if you are using egcs, pgcs, or gcc >2.8.1 use:
 #CFLAGS  = -g -Wall $(USEZ) $(DOS) $(UNIX) 
-CFLAGS  = -Wall $(USEZ) $(DOS) $(UNIX) -O3 -fomit-frame-pointer -march=pentiumpro 
+#CFLAGS  = -Wall $(USEZ) $(DOS) $(UNIX) -O3 -fomit-frame-pointer -march=pentiumpro 
+CFLAGS  = -Wall $(USEZ) $(DOS) $(UNIX) -O3 -fomit-frame-pointer
 
 L       =  $(ZLIB) 
 CC      = gcc
