@@ -29,7 +29,9 @@
 #include <string.h>
 #include <ctype.h>
 
+#include "compat.h"
 #include "symbol.h"
+
 /*=========================================================================*
  * function fromhex
  * parameters: txt, pointer to 2 digit hex string
@@ -41,12 +43,12 @@ int fromhex(char *txt) {
   if ((txt[0]>='0')&&(txt[0]<='9')) {
     num=(txt[0]-'0')*16;
   } else {
-    num=(toupper(txt[0])-'A'+10)*16;
+    num=(TOUPPER(txt[0])-'A'+10)*16;
   }
   if ((txt[1]>='0')&&(txt[1]<='9')) {
     num+=(txt[1]-'0');
   } else {
-    num+=(toupper(txt[1])-'A'+10);
+    num+=(TOUPPER(txt[1])-'A'+10);
   }
   return num&255;
 }
@@ -89,7 +91,8 @@ int read_page(FILE *in, char *buf, unsigned char *page) {
 
   while((!feof(in))&&(num<256)) {
     buf[0]=0;
-    fgets(buf,512,in);
+    if (!fgets(buf,512,in))
+      buf[0]=0;
     if (buf[0]=='#')
       continue;
     len=strlen(buf);
@@ -174,7 +177,8 @@ int save_snapshot(char *fin, char *fout) {
   okay=0;
   while(!feof(in)) {
     buf[0]=0;
-    fgets(buf,512,in);
+    if (!fgets(buf,512,in))
+      buf[0]=0;
     if (!strncmp("+RAM::",buf,6)) {
       okay=1;
       break;
@@ -201,7 +205,8 @@ int save_snapshot(char *fin, char *fout) {
   if (in) {
     while(!feof(in)) {
       buf[0]=0;
-      fgets(buf,512,in);
+      if (!fgets(buf,512,in))
+        buf[0]=0;
       if (!strncmp("+RAM::",buf,6)) {
         fprintf(out,"%s",buf);
         if (!read_page(in,buf,page)) {

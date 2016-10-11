@@ -22,7 +22,7 @@
 #define SYMBOL_H
 
 #define MAJOR_VER 1
-#define MINOR_VER 7
+#define MINOR_VER 8
 #define BETA_VER 0
 
 /*==========================================================================*/
@@ -120,10 +120,11 @@ extern memBank *banks, *activeBank;
 extern char *outline;  /* the line of text written out in verbose mode */
 extern unkLabel *unkLabels; /* list of unknown, referenced symbols */
 
-extern int repass;
+extern int double_fwd; /* flag indicating a double forward reference occured */
 
 #define HSIZE 511
 extern symbol *hash[HSIZE];
+extern FILE *listFile;
 
 /*==========================================================================*
  * some prototypes

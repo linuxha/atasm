@@ -1,7 +1,7 @@
 # If you want to use the compressed state files (you do), uncomment
 # the following lines, specifing the path to the zlib header file
 # and the library.
-# The zlib library homepage can be found at: 
+# The zlib library homepage can be found at:
 #   http://www.gzip.org/zlib/
 
 # for DOS (adjust paths as appropriate)
@@ -9,18 +9,17 @@
 #ZLIB    = -L/work/djgpp/src/zlib -lz
 #DOS     = -DDOS
 
-# if you are compiling under UNIX, change the above lines to 
+# if you are compiling under UNIX, change the above lines to
 # reflect the location of zlib.  I use:
-USEZ    = -DZLIB_CAPABLE 
+USEZ    = -DZLIB_CAPABLE
 ZLIB    = -lz
 UNIX    = -DUNIX
 
 # Compiler flags, if you are using egcs, pgcs, or gcc >2.8.1 use:
-#CFLAGS  = -g -Wall $(USEZ) $(DOS) $(UNIX) 
-#CFLAGS  = -Wall $(USEZ) $(DOS) $(UNIX) -O3 -fomit-frame-pointer -march=pentiumpro 
-CFLAGS  = -Wall $(USEZ) $(DOS) $(UNIX) -O3 -fomit-frame-pointer
+#CFLAGS  = -g -Wall $(USEZ) $(DOS) $(UNIX) $(ARCH)
+CFLAGS  = -Wall $(USEZ) $(DOS) $(UNIX) -O3 -fomit-frame-pointer $(ARCH)
 
-L       =  $(ZLIB) 
+L       =  $(ZLIB)
 CC      = gcc
 DESTDIR	= /usr/local/bin
 MANDIR	= /usr/local/man/man1
@@ -42,9 +41,9 @@ state2.o: symbol.h
 symbol.o: symbol.h inc_path.h atasm_err.h
 
 prog : $(OBJS)
-	$(CC) -o atasm $(OBJS) $(L)
-  
-clean:  
+	$(CC) -o atasm $(OBJS) $(L) $(ARCH)
+
+clean:
 	rm -f *.rej *.o *~ atasm atasm.1 atasm.exe
 	cd ../tests && make clean
 
@@ -63,5 +62,3 @@ install: all
 	cp atasm.1 $(MANDIR)
 	chown root.root $(MANDIR)/atasm.1 || true
 	chmod 644 $(MANDIR)/atasm.1
-
-

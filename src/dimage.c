@@ -40,6 +40,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "compat.h"
+
 #define lowb(x) ((x)&0x00ff)
 #define highb(x) (((x)>>8)&0x00ff)
 
@@ -71,7 +73,7 @@ typedef struct DiskImg {
   unsigned char *VTOCsec;
 } DiskImg;
 /*=========================================================================*/
-void readVTOC(DiskImg *img);
+int readVTOC(DiskImg *img);
 /*=========================================================================*/
 void kill_disk(DiskImg *image) {
   fclose(image->image);
@@ -84,7 +86,9 @@ DiskImg *get_new_disk(char *dname) {
   FILE *fd;
   unsigned char hdr[16];
   long lof,imgsz;
+  size_t sz;
   DiskImg dimg,*img;
+  int ok;
 
   dimg.header=0;
 
@@ -94,7 +98,11 @@ DiskImg *get_new_disk(char *dname) {
     return NULL;
   }
 
-  fread(hdr,16,1,fd);
+  sz=fread(hdr,1,16,fd);
+  if (sz!=16) {
+    fprintf(stderr,"Cannot open Atari disk image '%s'\n",dname);
+    return NULL;
+  }
   fseek(fd,0L,SEEK_END);
   lof=ftell(fd);
   rewind(fd);
@@ -144,9 +152,9 @@ DiskImg *get_new_disk(char *dname) {
 
   memset(img->secbuf,0,img->secSize);
   memset(img->VTOCsec,0,256);
-  readVTOC(img);
+  ok=readVTOC(img);
 
-  if (img->VTOCsec[0]!=2) {
+  if ((!ok)||(img->VTOCsec[0]!=2)) {
     fprintf(stderr,"ATasm can currently only handle Atari DOS 2.0s, 2.5 or compatibles\n");
     kill_disk(img);
     return NULL;
@@ -179,7 +187,7 @@ void convertfname(char *in, char *out) {
   y=*in++;
 
   while ((y!=0)&&(y!='.')) {
-    out[x]=toupper(y);
+    out[x]=TOUPPER(y);
     if(x!=8) x++;
     y=*in++;
   }
@@ -188,7 +196,7 @@ void convertfname(char *in, char *out) {
     x=8;
     y=*in++;
     while((x<11)&&(y)&&(y!='.')) {
-      out[x]=toupper(y);
+      out[x]=TOUPPER(y);
       x++;
       y=*in++;
     }
@@ -196,11 +204,14 @@ void convertfname(char *in, char *out) {
 }
 /*=========================================================================*/
 int readsec(DiskImg *img, int nr) {
+  size_t sz;
   if ((nr>img->dskSize)||(nr<1))
     return 0;
   fseek(img->image,(long)sector_pos(img,nr),SEEK_SET);
-  fread(img->secbuf,img->secSize,1,img->image);
-  return 1;
+  sz=fread(img->secbuf,img->secSize,1,img->image);
+  if (sz==1)
+    return 1;
+  return 0;
 }
 /*=========================================================================*/
 int writesec(DiskImg *img, int nr) {
@@ -212,17 +223,22 @@ int writesec(DiskImg *img, int nr) {
   return 1;
 }
 /*=========================================================================*/
-void readVTOC(DiskImg *img) {
+int readVTOC(DiskImg *img) {
+  size_t sz;
   fseek(img->image,(long)(sector_pos(img,VTOC_SECTOR)),SEEK_SET);
-  fread(img->VTOCsec,img->secSize,1,img->image);
-
+  sz=fread(img->VTOCsec,img->secSize,1,img->image);
+  if (sz!=1)
+    return 0;
   if (img->dskSize==SS_ED) {
     /* if 2.5 ED VTOC is also at sector 1024, which overlaps in a odd way... */
     unsigned char buf[128];
     fseek(img->image,(long)(sector_pos(img,VTOC_SECTOR2)),SEEK_SET);
-    fread(buf,img->secSize,1,img->image);
+    sz=fread(buf,img->secSize,1,img->image);
+    if (sz!=1)
+      return 0;
     memcpy(img->VTOCsec+100,buf+84,44);
   }
+  return 1;
 }
 /*=========================================================================*/
 void writeVTOC(DiskImg *img) {
@@ -319,8 +335,8 @@ void marksec(DiskImg *img, int nr) {
   /*  writeVTOC(img); */
 }
 /*=========================================================================*/
-int scandir(DiskImg *img, char *filename, int delete) {
-  int secnum,cnt,status,length,startsec;
+int scandir(DiskImg *img, char *filename, int del) {
+  int secnum,cnt,status,startsec;
   int endofdir;
   char fname[12];
 
@@ -343,7 +359,7 @@ int scandir(DiskImg *img, char *filename, int delete) {
 
     for(cnt=0; cnt<DIR_ENTRIES; cnt++) {
       status=img->secbuf[cnt*DIR_ENTRY_SZ];
-      length=img->secbuf[cnt*DIR_ENTRY_SZ+1]+256*img->secbuf[cnt*DIR_ENTRY_SZ+2];
+      /*length=img->secbuf[cnt*DIR_ENTRY_SZ+1]+256*img->secbuf[cnt*DIR_ENTRY_SZ+2];*/
 
       if (!status) {
         endofdir=1;
@@ -355,9 +371,9 @@ int scandir(DiskImg *img, char *filename, int delete) {
         fname[11]=0;
         if (!strncmp(filename,fname,11)) {
           startsec=img->secbuf[cnt*DIR_ENTRY_SZ+3]+img->secbuf[cnt*DIR_ENTRY_SZ+4]*256;
-          if (delete) {
+          if (del) {
             /* It turns out that purging directory entry causes DOS to stop
-         reading the directory... better just mark as deleted */
+               reading the directory... better just mark as deleted */
             img->secbuf[cnt*DIR_ENTRY_SZ]|=0x80;
             writesec(img,secnum);
           }
@@ -446,6 +462,7 @@ int delete_file(DiskImg *img, char *filename) {
 int write_xfd_file(char *fimage, char *file) {
   FILE *in;
   DiskImg *image;
+  size_t sz;
   int startsec,cursec,nextsec;
   int entrynum, secsfree;
   int qwe,x,max,ed;
@@ -511,8 +528,8 @@ int write_xfd_file(char *fimage, char *file) {
     marksec(image,cursec);
     nextsec=find_free_sec(image);
     if (in) {
-      fread(data,image->lnk,1,in);
-      memcpy(image->secbuf,data,image->lnk);
+      sz=fread(data,1,image->lnk,in);
+      memcpy(image->secbuf,data,sz);
     } else
       memcpy(image->secbuf,data+x*image->lnk,image->lnk);
 
@@ -528,8 +545,8 @@ int write_xfd_file(char *fimage, char *file) {
     cursec=find_free_sec(image);
     marksec(image,cursec);
     if (in) {
-      fread(data,image->lnk,1,in);
-      memcpy(image->secbuf,data,qwe);
+      sz=fread(data,1,image->lnk,in);
+      memcpy(image->secbuf,data,sz);
     } else
       memcpy(image->secbuf,data+x*image->lnk,qwe);
     image->secbuf[image->lnk]=(entrynum<<2);

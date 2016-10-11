@@ -54,7 +54,7 @@ unkLabel *unkLabels;
 symbol *hash[HSIZE];
 
 symbol *linkit();
-int repass;
+int repass, double_fwd;
 
 /*=========================================================================*
  * function isUnk
@@ -278,14 +278,14 @@ symbol *findsym(char *name) {
   int i;
   symbol *walk;
   macro_call *stack=invoked;
-  char buf[256], *look;
+  char nbuf[256],buf[256], *look;
 
   if (name[0]=='?') {   /* Munge .LOCAL symbols */
     if (opt.MAElocals)
-      snprintf(buf,256,"%s%s",opt.MAEname,name);
+      snprintf(nbuf,256,"%s%s",opt.MAEname,name);
     else
-      snprintf(buf,256,"=%d=%s",local,name+1);
-    name=buf;
+      snprintf(nbuf,256,"=%d=%s",local,name+1);
+    name=nbuf;
   }
   while(1){
     if (stack) { /* Munge macro symbols... */
@@ -402,7 +402,7 @@ symbol *linkit() {
     }
     walk->lnk=NULL;
     i++;
-    while((!hash[i])&&(i<HSIZE))
+    while((i<HSIZE)&&(!hash[i]))
       i++;
     if (i<HSIZE) {
       walk->lnk=hash[i];
@@ -616,7 +616,7 @@ int macro_subst(char *name, char *in, macro_line *args, int max) {
   */
   while(*look) {
     if (*look=='%') { /* time to substitute a paramter */
-      if ((*(look+1)=='$')||(isdigit(*(look+1)))||
+      if ((*(look+1)=='$')||(ISDIGIT(*(look+1)))||
           (*(look+1)=='(')||((*(look+1)=='$')&&(*(look+2)=='('))) {
         look++;
         stype=ltype=0;
@@ -651,7 +651,7 @@ int macro_subst(char *name, char *in, macro_line *args, int max) {
             error("Illegal label type in macro parameter",1);
           pnum=sym->addr;
         } else {  /* Normal parameter idx */
-          while((isdigit(*look))&&(i<15))
+          while((ISDIGIT(*look))&&(i<15))
             num[i++]=*look++;
           if (i==15)
             error("Number overflow in macro parameter",1);
@@ -683,7 +683,7 @@ int macro_subst(char *name, char *in, macro_line *args, int max) {
             } else if ((cmd->line[0]!=34)&&(stype)) { /* string val for num */
               /* FIXME to return correct string name--any rules for this?*/
               i=0;
-              while((cmd->line[i])&&!isalpha(cmd->line[i]))
+              while((cmd->line[i])&&!ISALPHA(cmd->line[i]))
                 i++;
               get_name(cmd->line+i,walk);
             } else
@@ -730,7 +730,7 @@ int create_macro(symbol *sym) {
   strcpy(m->name,str);
   up=m->name;
   while(*up) {
-    *up=toupper(*up);
+    *up=TOUPPER(*up);
     up++;
   }
   if (findsym(entry->name)) {
@@ -888,7 +888,7 @@ int do_rept(symbol *sym) {
   if (num==0xffff)
     error("Malformed repeat value.",1);
 
-  /*  if ((!isdigit(str[0]))&&(str[0]!='$'))
+  /*  if ((!ISDIGIT(str[0]))&&(str[0]!='$'))
       error("Malformed repeat value.",1);
 
   printf("Repeat block %d\n",num);
@@ -1027,4 +1027,3 @@ void clean_up() {
   free_str_list(predefs);
 }
 /*=========================================================================*/
-

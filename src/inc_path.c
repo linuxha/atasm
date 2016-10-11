@@ -108,13 +108,18 @@ void append_include(str_list *head, char *path) {
 
   attempts to open a file, checking all include paths
  *=========================================================================*/
-FILE *fopen_include(str_list *head, char *fname) {
-  char errbuf[255];
+FILE *fopen_include(str_list *head, char *fname, int is_binary) {
+  char errbuf[255],mode[3];
   char *full_path;
   FILE *in;
 
+  if (is_binary)
+    strcpy(mode,"rb");
+  else
+    strcpy(mode,"rt");
+
   /* First, attempt to open file normally... */
-  in=fopen(fname,"rt");
+  in=fopen(fname,mode);
   if (in)
     return in;
 
@@ -128,7 +133,7 @@ FILE *fopen_include(str_list *head, char *fname) {
     strcpy(full_path, head->str);
     strcat(full_path, DIR_SEP);
     strcat(full_path, fname);
-    in=fopen(full_path,"rt");
+    in=fopen(full_path,mode);
     if (in) {
       free(full_path);
       return in;

@@ -68,11 +68,14 @@ March 17, 2009
                  Fixed a buffer overflow problem; Added -l option to allow label output;
                  Compiling Windows executable with mingw
 
-May 1, 2010
-  version 1.07 - introduced .BANKNUM operator; Allow .SET 6 to forward
-                 reference labels; Allow leading underscores and periods
-                 in label names; Fixed an error with command-line
-                 defines; Allow character quoting of spaces and
-                 semicolons;  Allow comments to start without a
-                 preceding  space.
+September 21, 2011
+  version 1.07 - Introduced .BANKNUM operator; Allow .SET 6 to forward reference labels;
+                 Allow leading underscores in label names; Fixed an error with command-line
+                 defines; Allow character quoting of spaces and semicolons;  Allow comments
+                 to start without a preceding  space.  Fixed local label references inside
+                 of macros or macro parameters.
 
+May 26, 2014
+  version 1.08 - Initial support of list files with -g command-line parameter; Allow .INCBIN
+                 to honor include paths; Missing state files no longer segfault;  Double-forward
+                 defines now throw an error rather than silently generate bad code

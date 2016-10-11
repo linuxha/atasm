@@ -54,14 +54,15 @@
 #define GZCLOSE( X )		fclose( X )
 #define GZREAD( X, Y, Z )	fread( Y, Z, 1, X )
 #define GZWRITE( X, Y, Z )	fwrite( Y, Z, 1, X )
-#define gzFile FILE
+#define gzFile FILE *
 #endif	/* not ZLIB_CAPABLE */
 
 /* Some Emulator specific defines... */
 #define UBYTE unsigned char
 #define UWORD unsigned short int
 
-gzFile *StateIn, *StateOut;
+gzFile StateIn;
+gzFile StateOut;
 
 typedef enum {
   TV_PAL,
@@ -341,7 +342,7 @@ void MainStateRead() {
   default:
     machine = AtariXLXE;
     ram_size=64;
-    fprintf(stderr, "Warning: Bad machine type in state save, defaulting to XL" );
+    fprintf(stderr, "Warning: Bad machine type in state save, defaulting to XL\n" );
     break;
   }
   ReadINT(&pil_on,1);
@@ -502,7 +503,7 @@ void CpuStateRead(UBYTE SaveVerbose) {
   }
 }
 /*==========================================================================*/
-int FileCopy(gzFile *in, gzFile *out) {
+int FileCopy(gzFile in, gzFile out) {
   int result;
   UBYTE *buf;
 
@@ -552,14 +553,14 @@ int save_A800state(char *fin, char *fout) {
 
   StateIn=GZOPEN(fin,"rb");
   if(!StateIn) {
-    fprintf(stderr,"Could not open template state file '%s'.",fin);
+    fprintf(stderr,"Could not open template state file '%s'.\n",fin);
     return 0;
   }
 
   result=GZREAD(StateIn,header_string,8);
   header_string[8]=0;
   if(strcmp(header_string,"ATARI800")) {
-    fprintf(stderr, "'%s' is not an Atari800 state file.",fin);
+    fprintf(stderr, "'%s' is not an Atari800 state file.\n",fin);
     result=GZCLOSE(StateIn);
     return 0;
   }
@@ -567,7 +568,7 @@ int save_A800state(char *fin, char *fout) {
   result=GZREAD(StateIn,&StateVersion,1);
   result1=GZREAD(StateIn,&SaveVerbose,1);
   if(result==0||result1==0) {
-    fprintf(stderr, "Couldn't read from state file '%s'.",fin);
+    fprintf(stderr, "Couldn't read from state file '%s'.\n",fin);
     result = GZCLOSE(StateIn);
     return 0;
   }
@@ -617,6 +618,10 @@ int templateType(char *fin) {
 
   /* Guess if we are an atari++ save file */
   in=fopen(fin,"rb");
+  if(!in) {
+    fprintf(stderr,"Could not open template state file '%s'.\n",fin);
+    return 0;
+  }
   buf=(char *)malloc(8192);
   while(!feof(in)) {
     result=fread(buf,1,8191,in);
@@ -633,7 +638,7 @@ int templateType(char *fin) {
   /* Check for Atari800 save file */
   StateIn=GZOPEN(fin,"rb");
   if(!StateIn) {
-    fprintf(stderr,"Could not open template state file '%s'.",fin);
+    fprintf(stderr,"Could not open template state file '%s'.\n",fin);
     return 0;
   }
   result=GZREAD(StateIn,header_string,8);
@@ -669,6 +674,3 @@ int save_state(char *fin, char *fname) {
   return save_snapshot(fin,fname);
 }
 /*=========================================================================*/
-
-
-

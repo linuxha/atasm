@@ -76,10 +76,10 @@ int parse_expr(char *a) {
   look=a;
   walk=expr;
   while(*look) {
-    if (isdigit(*look)) {
+    if (ISDIGIT(*look)) {
       *walk++='v';
       n=walk;
-      while(isdigit(*look))
+      while(ISDIGIT(*look))
         *n++=*look++;
       *n=0;
       sscanf(walk,"%d",&v);
@@ -113,8 +113,8 @@ int parse_expr(char *a) {
 int get_name(char *src, char *dst) {
   int l=0;
 
-  while((isalnum(*src))||(*src=='_')||(*src=='?')||(*src=='@')||(*src=='.')) {
-    *dst++=toupper(*src++);
+  while((ISALNUM(*src))||(*src=='_')||(*src=='?')||(*src=='@')) {/*||(*src=='.')) { */
+    *dst++=TOUPPER(*src++);
     l++;
   }
   *dst=0;
@@ -166,7 +166,7 @@ int get_signed_expression(char *str, int tp) {
   look=str;
   while(*look) {
     if (*look=='*') {
-      if ((walk==buf)||((!isdigit(*(walk-1)))&&(*(walk-1)!=']'))||
+      if ((walk==buf)||((!ISDIGIT(*(walk-1)))&&(*(walk-1)!=']'))||
           (*(look+1)=='*')) {
         snprintf(work,256,"%d",pc);
         strcpy(walk,work);
@@ -177,8 +177,8 @@ int get_signed_expression(char *str, int tp) {
       *walk++=*look++;
     else if (*look=='!')      /* Old binary OR operator */
       *walk++='|';
-    else if (isdigit(*look)) {
-      while(isdigit(*look)) { /* Immediate value */
+    else if (ISDIGIT(*look)) {
+      while(ISDIGIT(*look)) { /* Immediate value */
         *walk++=*look++;
       }
     } else if (*look=='$') {  /* Hex value */
@@ -187,9 +187,9 @@ int get_signed_expression(char *str, int tp) {
       *w++=*look++;
       hold=look;
 
-      while(isxdigit(*look))
+      while(ISXDIGIT(*look))
         *w++=*look++;
-      if (isalpha(*look)) {  /* symbol #$SOMETHING, give warning */
+      if (ISALPHA(*look)) {  /* symbol #$SOMETHING, give warning */
         v=get_name(hold,work);
         look=hold+v;
         sym=findsym(work);
@@ -211,7 +211,7 @@ int get_signed_expression(char *str, int tp) {
     } else if (*look=='~') {  /* binary value */
       w=work;
       *w++=*look++;
-      while(isdigit(*look))
+      while(ISDIGIT(*look))
         *w++=*look++;
       *w=0;
       v=num_cvt(work);
@@ -305,6 +305,9 @@ int get_signed_expression(char *str, int tp) {
         return 0xffff;
       } else {
         v=sym->addr;
+        if ((pass)&&(v==0xffff)&&(sym->ref!=1)) {
+          double_fwd=1;
+        }
       }
       sym->ref=1;
       snprintf(work,256,"%d",v);

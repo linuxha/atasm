@@ -127,8 +127,11 @@ int error(char *err, int tp) {
     fprintf(stderr,"Warning: ");
   }
   fprintf(stderr,"%s\n",err);
-  if (tp)
+  if (tp) {
+    if (listFile)
+      fclose(listFile);
     exit(tp);
+  }
   warn++;
   return 0;
 }

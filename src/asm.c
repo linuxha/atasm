@@ -126,6 +126,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdarg.h>
 
 #include "compat.h"
 #include "ops.h"
@@ -150,6 +151,7 @@ memBank *banks, *activeBank;
 int bankID;
 char *outline;  /* the line of text written out in verbose mode */
 
+FILE *listFile;
 /*=========================================================================*
  * function kill_banks
  * removes all banks
@@ -228,7 +230,7 @@ int init_asm() {
   int i,ops;
   symbol *sym;
 
-  pass=warn=bsize=repass=0;
+  pass=warn=bsize=repass=double_fwd=0;
   fin=NULL;
   macro_list=NULL;
   invoked=NULL;
@@ -284,7 +286,7 @@ int open_file(char *fname) {
   fnew->name=(char *)malloc(strlen(fname)+1);
   strcpy(fnew->name,fname);
 
-  fnew->in = fopen_include(includes, fname);
+  fnew->in = fopen_include(includes, fname, 0);
   if (!fnew->in) {
     snprintf(buf,256,"Cannot open file '%s'\n",fname);
     error(buf,1);
@@ -294,6 +296,50 @@ int open_file(char *fname) {
   fin=fnew;
   return 1;
 }
+
+/*=========================================================================*
+ * function open_file(char *fname)
+ * parameters: fname is the file name to process
+ *
+ * this functions adds a new file onto the current file processing stack
+ * The file stack structure saves the state of each file as it is is
+ * being processed.  This allows for nested .INCLUDEs
+ *=========================================================================*/
+void aprintf(char *msg, ...) {
+  char buf[256], line[256];
+  static char *lfin=0;
+
+  va_list args;
+
+  buf[0]=line[0]=0;
+  va_start(args,msg);
+  vsprintf(buf,msg,args);
+  strcat(line,buf);
+  va_end(args);
+
+  /* normal verbose output */
+  if (verbose&1) {
+    fputs(line,stdout);
+  }
+
+  /* list file output */
+  if ((verbose&2)&&(listFile)) {
+    strcpy(buf,line);
+    squeeze_str(buf);
+    if (buf[0]) {
+      if ((!lfin)||(lfin!=fin->name)) {
+        lfin=fin->name;
+        fprintf(listFile,"\nSource: %s\n",fin->name);
+      }
+      /* convert address from LE to BE display */
+      strncpy(buf,line+3,2);
+      strncpy(buf+2,line,2);
+      buf[4]=0;
+      fprintf(listFile,"%d %s%s",fin->line,buf,line+5);
+    }
+  }
+}
+
 /*=========================================================================*
  * function get_nxt_word(int tp)
  * parameters: tp denotes the processing mode where(?)
@@ -399,12 +445,14 @@ char *get_nxt_word(int tp) {
         }
       } else { /* get new line from file */
         fin->line++;
-        fgets(line,256,fin->in);
+        if (!fgets(line,256,fin->in)) {
+          line[0]=0;
+        }
       }
       /* strip line number, if one exists */
-      if (isdigit(line[0])) {
+      if (ISDIGIT(line[0])) {
         i=0;
-        while(isdigit(line[i]))
+        while(ISDIGIT(line[i]))
           line[i++]=32;
       }
       /* Remove EOL characters */
@@ -414,7 +462,7 @@ char *get_nxt_word(int tp) {
           line[i]=0;
       }
       walk=line+strlen(line)-1;
-      while(isspace(*walk)) {
+      while(ISSPACE(*walk)) {
         *walk=0;
         walk--;
       }
@@ -430,7 +478,7 @@ char *get_nxt_word(int tp) {
           return NULL;
       }
     }
-    while(isspace(*fget)) {
+    while(ISSPACE(*fget)) {
       fget++;
     }
     if (((fget)&&(!(*fget)))||(*fget==';')) {
@@ -458,7 +506,7 @@ char *get_nxt_word(int tp) {
       }
     }
     *look++=l;
-  } while((l)&&((instr)||(!isspace(l)))&&(l!=';'));
+  } while((l)&&((instr)||(!ISSPACE(l)))&&(l!=';'));
   /* Fix to stop on ';' comment above, from 8bit-man;  04/19/2010 */
 
   if (l)
@@ -471,7 +519,7 @@ char *get_nxt_word(int tp) {
 
   if (l) {
     /* Skip to next token if available */
-    while((fget)&&(isspace(*fget))) {
+    while((fget)&&(ISSPACE(*fget))) {
       fget++;
     }
     /* Check for '=' or '.=' */
@@ -611,7 +659,7 @@ int put_float(char *f) {
         error("Malformed floating point constant.",1);
       d=i;
       look++;
-    } else if (!isdigit(*look))
+    } else if (!ISDIGIT(*look))
       error("Malformed floating point constant.",1);
     else if (i<16)
       *walk++=*look++;
@@ -747,7 +795,7 @@ int add_label(char *label) {
   }
 
   if (!pass) {
-    if (!((label[0]=='@')||(label[0]=='?')||(label[0]=='_')||(isalpha(label[0])))) {
+    if (!((label[0]=='@')||(label[0]=='?')||(label[0]=='_')||(ISALPHA(label[0])))) {
       error("Illegal label name, must start with '@','?', or a letter.",1);
     }
     if (strchr(label,'='))
@@ -824,6 +872,11 @@ int add_label(char *label) {
   }
   if (eq) {  /*  an equate */
     sym=findsym(label);
+    if (!sym) {
+      char buf[256];
+      sprintf(buf,"Cannot find label %s", label);
+      error(buf,1);
+    }
     str=get_nxt_word(1);
 
     if (pass) {
@@ -864,7 +917,7 @@ int parse_operand(symbol *sym, char *str) {
     if ((idx>str)&&(*(idx-1)!='\'')) {  /* allow quoting: cmp #', */
       *idx=0;
       idx++;
-      vidx=toupper(*idx);
+      vidx=TOUPPER(*idx);
       if ((vidx!='X')&&(vidx!='Y'))
         error("Illegal index",1);
       if ((vidx=='X')&&(str[0]=='(')) {
@@ -983,7 +1036,7 @@ int num_cvt(char *num) {
   int v,i,bit,tp;
   char *txt;
 
-  if (!isdigit(num[0])) {
+  if (!ISDIGIT(num[0])) {
     txt=num+1;
     if (num[0]=='$')
       tp=1;
@@ -1039,7 +1092,7 @@ int squeeze_str(char *str) {
       *walk++=*look++;
       continue;
     }
-    if (!isspace(*look)) {
+    if (!ISSPACE(*look)) {
       *walk=*look;
       walk++;  /* *walk++ */
     }
@@ -1080,7 +1133,7 @@ int to_comma(char *in, char *out) {
   *out=0;
 
   out=out+strlen(out)-1;
-  while(isspace(*out)) {
+  while(ISSPACE(*out)) {
     *out=0;
     out--;
   }
@@ -1097,10 +1150,10 @@ int do_float() {
   int d,c,p;
 
   str=get_nxt_word(1);
-  while(isspace(*str))
+  while(ISSPACE(*str))
     str++;
   look=str+strlen(str)-1;
-  while(isspace(*look)) {
+  while(ISSPACE(*look)) {
     *look=0;
     look--;
   }
@@ -1125,10 +1178,10 @@ int do_float() {
 
     if ((pass)&&(verbose)&&(c==2)) {
       if (!p) {
-        printf("%s %s\n",outline,get_nxt_word(2));
+        aprintf("%s %s\n",outline,get_nxt_word(2));
         p=1;
       } else {
-        printf("%s\n",outline);
+        aprintf("%s\n",outline);
       }
       outline[0]=0;
       c=0;
@@ -1137,9 +1190,9 @@ int do_float() {
 
   if ((pass)&&(verbose)&&(c)) {
     if (!p) {
-      printf("%s %s\n",outline,get_nxt_word(2));
+      aprintf("%s %s\n",outline,get_nxt_word(2));
     } else {
-      printf("%s\n",outline);
+      aprintf("%s\n",outline);
     }
   }
   outline[0]=0;
@@ -1165,10 +1218,10 @@ int do_xword(int tp) {
   tp=(tp==3);
 
   str=get_nxt_word(1);
-  while(isspace(*str))
+  while(ISSPACE(*str))
     str++;
   look=str+strlen(str)-1;
-  while(isspace(*look)) {
+  while(ISSPACE(*look)) {
     *look=0;
     look--;
   }
@@ -1215,10 +1268,10 @@ int do_xword(int tp) {
     }
     if ((pass)&&(verbose)&&(c==3)) {
       if (!p) {
-        printf("%s %s\n",outline,get_nxt_word(2));
+        aprintf("%s %s\n",outline,get_nxt_word(2));
         p=1;
       } else {
-        printf("%s\n",outline);
+        aprintf("%s\n",outline);
       }
       outline[0]=0;
       c=0;
@@ -1226,9 +1279,9 @@ int do_xword(int tp) {
   }
   if ((pass)&&(verbose)&&(c)) {
     if (!p) {
-      printf("%s %s\n",outline,get_nxt_word(2));
+      aprintf("%s %s\n",outline,get_nxt_word(2));
     } else {
-      printf("%s\n",outline);
+      aprintf("%s\n",outline);
     }
   }
   outline[0]=0;
@@ -1255,10 +1308,10 @@ int do_xbyte(int tp) {
 
   add=cb=0;
   str=get_nxt_word(1);
-  while(isspace(*str))
+  while(ISSPACE(*str))
     str++;
   look=str+strlen(str)-1;
-  while(isspace(*look)) {
+  while(ISSPACE(*look)) {
     *look=0;
     look--;
   }
@@ -1293,8 +1346,9 @@ int do_xbyte(int tp) {
       d=to_comma(look,buf);
       look=look+d;
       d=strlen(buf)-1;
-      if (((d<0)||(buf[0]!=34))&&(buf[d]!=34)) {
-        error("Malformed string.",0);
+      if ((((d<0)||(buf[0]!=34))&&(buf[d]!=34))||
+          ((d>0)&&(buf[0]==34)&&(buf[d]!=34))) {
+        error("Malformed string.",1);
       } else {
         if (pass)
           for(i=1;i<d;i++) {
@@ -1309,10 +1363,10 @@ int do_xbyte(int tp) {
           c++;
           if ((pass)&&(verbose)&&(c==6)) {
             if (!p) {
-              printf("%s %s\n",outline,get_nxt_word(2));
+              aprintf("%s %s\n",outline,get_nxt_word(2));
               p=1;
             } else {
-              printf("%s\n",outline);
+              aprintf("%s\n",outline);
             }
             outline[0]=0;
             print_pc();
@@ -1343,10 +1397,10 @@ int do_xbyte(int tp) {
 
     if ((pass)&&(verbose)&&(c==5)) {
       if (!p) {
-        printf("%s %s\n",outline,get_nxt_word(2));
+        aprintf("%s %s\n",outline,get_nxt_word(2));
         p=1;
       } else {
-        printf("%s\n",outline);
+        aprintf("%s\n",outline);
       }
       c=0;
       outline[0]=0;
@@ -1354,9 +1408,9 @@ int do_xbyte(int tp) {
   }
   if ((pass)&&(verbose)&&(c)) {
     if (!p) {
-      printf("%s %s\n",outline,get_nxt_word(2));
+      aprintf("%s %s\n",outline,get_nxt_word(2));
     } else {
-      printf("%s\n",outline);
+      aprintf("%s\n",outline);
     }
   }
   outline[0]=0;
@@ -1383,7 +1437,7 @@ int get_single(symbol *sym) {
   }
   a=get_nxt_word(3);
   squeeze_str(a);
-  if ((!strlen(a))||((strlen(a)==1)&&(toupper(*a)=='A'))) {
+  if ((!strlen(a))||((strlen(a)==1)&&(TOUPPER(*a)=='A'))) {
     a=get_nxt_word(1);
     if (pass)
       put_opcode(acc[sym->addr]);
@@ -1405,7 +1459,7 @@ int incbin(char *fname) {
   FILE *in;
   int b,v;
 
-  in=fopen(fname,"rb");
+  in=fopen_include(includes, fname, 1);
   if (!in) {
     error("Cannot open binary file",1);
   }
@@ -1483,7 +1537,7 @@ int proc_sym(symbol *sym) {
       while(strlen(outline)<16)
         strcat(outline," ");
       line=get_nxt_word(2);
-      printf("%s%s\n",outline,line);
+      aprintf("%s%s\n",outline,line);
       /*      if (invoked) {
   printf("\t\t[inside %s]\n",invoked->orig->name);
       } else {
@@ -1542,7 +1596,7 @@ int proc_sym(symbol *sym) {
           str=get_nxt_word(4);
           len=strlen(str);
           for(i=0;i<len;i++) {
-            str[i]=toupper(str[i]);
+            str[i]=TOUPPER(str[i]);
           }
           if (!strcmp(str,"NO")) {
             negated=1;
@@ -1607,7 +1661,7 @@ int proc_sym(symbol *sym) {
         error("Malformed * operator.",1);
       }
       if ((verbose)&&(pass))
-        printf("\n");
+        aprintf("\n");
       eq=0;
       str=get_nxt_word(1);
       squeeze_str(str);
@@ -1669,7 +1723,7 @@ int proc_sym(symbol *sym) {
       for(i=0;i<addr;i++) {
         if ((verbose)&&(pass)&&(!(i&3))) {
           if (i)
-            printf("%s\n",outline);
+            aprintf("%s\n",outline);
           outline[0]=0;
           print_pc();
         }
@@ -1679,11 +1733,11 @@ int proc_sym(symbol *sym) {
           pc++;
       }
       if ((verbose)&&(pass))
-        printf("%s\n",outline);
+        aprintf("%s\n",outline);
       outline[0]=0;
       break;
     case 27: { /* .BANK */
-      unsigned short symbolID;
+      unsigned short symbolID=0;
       int p1,p2;
 
       p1=p2=-1;
@@ -1792,7 +1846,7 @@ int proc_sym(symbol *sym) {
   case LABEL:  /* labels and equates */
   case EQUATE:
     if (!pass) {
-      if (eq==2) {
+      if (eq==1) {  /* was 2? probably a typo - mws */
         snprintf(buf,80,"Symbol '%s' is not a transitory equate!",sym->name);
         error(buf,1);
       } else {
@@ -1826,6 +1880,14 @@ int proc_sym(symbol *sym) {
     if (!pass) {
       if (eq==2) {
         str=get_nxt_word(1);
+
+        /* even in first pass allow .= updates for .IFs */
+        squeeze_str(str);
+        addr=get_address(str);
+        sym->addr=addr;
+        sym->bank=activeBank->sym_id;
+        defUnk(sym->name,addr);
+
         eq=0;
       } else {
         snprintf(buf,80,"Use .= to assign '%s' new a value.",sym->name);
@@ -1863,7 +1925,7 @@ int do_cmd(char *buf) {
 
   len=strlen(buf);
   for(i=0;i<len;i++)
-    buf[i]=toupper(buf[i]);
+    buf[i]=TOUPPER(buf[i]);
 
   sym=findsym(buf);
 
@@ -1928,7 +1990,12 @@ int assemble(char *fname) {
     if (repass) {
       zlabels++;
       i=-1;
-      pass=repass=0;
+      pass=repass=double_fwd=0;
+      continue;
+    }
+    if (double_fwd) {
+      i=-1;
+      pass=repass=double_fwd=0;
       continue;
     }
     if ((verbose)&&(pass==1))
@@ -2209,23 +2276,24 @@ int find_extension(char *name) {
  * starts the whole process
  *=========================================================================*/
 int main(int argc, char *argv[]) {
-  char outfile[256],fname[256],snap[256],xname[256],labelfile[256];
+  char outfile[256],fname[256],snap[256],xname[256],labelfile[256],listfile[256];
   int dsymbol,i,state;
 
   fprintf(stderr,"ATasm %d.%.2d%s(A mostly Mac65 compatible 6502 cross-assembler)\n",MAJOR_VER,MINOR_VER,BETA_VER?" beta ":" ");
 
   dsymbol=state=0;
   strcpy(snap,"atari800.a8s");
-  fname[0]=outfile[0]=labelfile[0]='\0';
+  fname[0]=outfile[0]=labelfile[0]=listfile[0]='\0';
   opt.savetp=opt.verbose=opt.MAElocals=0;
   opt.fillByte=0xff;
 
   includes=init_include();
   predefs=NULL;
+  listFile=NULL;
 
   for(i=1;i<argc;i++) {
     if (!STRCASECMP(argv[i],"-v"))
-      opt.verbose=1;
+      opt.verbose|=1;
     else if (!STRCASECMP(argv[i],"--version"))
       return 0;
     else if (!STRCASECMP(argv[i],"-u"))
@@ -2251,11 +2319,24 @@ int main(int argc, char *argv[]) {
       if (strlen(argv[i])>2) {
         strcpy(labelfile, argv[i]+2);
       } else {
-        fprintf(stderr, "Must specify label output file for -l (example: -llables.txt)\n");
+        fprintf(stderr, "Must specify label output file for -l (example: -llabels.lab)\n");
         return 1;
       }
     }
-    else if (!strncmp(argv[i], "-I", 2))
+    else if (!STRNCASECMP(argv[i],"-g",2)) {
+      if (strlen(argv[i])>2) {
+        strcpy(listfile, argv[i]+2);
+        listFile=fopen(listfile,"wt");
+        if (!listFile) {
+          fprintf(stderr, "Cannot write to list file'%s'\n",listfile);
+          return 1;
+        }
+        opt.verbose|=2;
+      } else {
+        fprintf(stderr, "Must specify list output file for -g (example: -glist.lst)\n");
+        return 1;
+      }
+    } else if (!strncmp(argv[i], "-I", 2))
       if (strlen(argv[i])>2)
         append_include(includes, argv[i]+2);
     else {
@@ -2296,6 +2377,7 @@ int main(int argc, char *argv[]) {
       fputs("         -o[fname]: saves object file to [fname] instead of <fname>.65o\n",stderr);
       fputs("         -d[symbol=value]: pre-defines [symbol] to [value]\n",stderr);
       fputs("         -l[fname]: dumps labels to file [fname]\n",stderr);
+      fputs("         -g[fname]: dumps debug list to file [fname]\n",stderr);
       fputs("         -Idirectory: search [directory] for .INCLUDE files\n",stderr);
       fputs("         -mae: treats local labels like MAE assembler\n",stderr);
       return 1;
@@ -2317,6 +2399,12 @@ int main(int argc, char *argv[]) {
 
   fputs("\nAssembly successful\n",stderr);
   fprintf(stderr,"  Compiled %d bytes (~%dk)\n",bsize,bsize/1024);
+
+  if (listFile) {
+    fclose(listFile);
+    listFile=NULL;
+    listfile[0]=0;
+  }
 
   activeBank=banks;
 
