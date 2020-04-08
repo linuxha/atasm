@@ -739,7 +739,7 @@ int print_pc() {
     snprintf(buf,32,"      ");
   else {
     int opc=(pc+activeBank->offset)&0xffff;
-    snprintf(buf,32,"%.2X:%.2X  ",opc&0xff,opc>>8);
+    snprintf(buf,32,"%.2X%.2X:  ",opc>>8,opc&0xff);
   }
   strcat(outline,buf);
   return 0;
