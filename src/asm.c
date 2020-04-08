@@ -88,6 +88,7 @@
  *               ...will add DELAY?L to symbol table
  *  02/12/10 mws calculate .SET 6 on second pass to allow for symbol refs
  *  04/19/10 mws applied patch frm 8bit-man to fix token grab routine ';'
+ *  04/08/20 jt  changed format of outputted address from 'xx:xx' to xxxx:
  *==========================================================================*
  * TODO
  *   indepth testing of .IF,.ELSE,.ENDIF (signal error on mismatches?)
@@ -332,8 +333,8 @@ void aprintf(char *msg, ...) {
         fprintf(listFile,"\nSource: %s\n",fin->name);
       }
       /* convert address from LE to BE display */
-      strncpy(buf,line+3,2);
-      strncpy(buf+2,line,2);
+      //strncpy(buf,line+3,2);
+      //strncpy(buf+2,line,2);
       buf[4]=0;
       fprintf(listFile,"%d %s%s",fin->line,buf,line+5);
     }
