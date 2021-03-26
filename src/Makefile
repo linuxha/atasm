@@ -11,7 +11,7 @@
 
 # if you are compiling under UNIX, change the above lines to
 # reflect the location of zlib.  I use:
-USEZ    = -DZLIB_CAPABLE
+USEZ    = -DZLIB_CAPABLE -I../zlib
 ZLIB    = -lz
 UNIX    = -DUNIX
 

@@ -89,6 +89,11 @@
  *  02/12/10 mws calculate .SET 6 on second pass to allow for symbol refs
  *  04/19/10 mws applied patch frm 8bit-man to fix token grab routine ';'
  *  04/08/20 jt  changed format of outputted address from 'xx:xx' to xxxx:
+ *  03/20/21 ph  Fixed / and \ in filename when saving to ATR
+ *               Fixed stack-based buffer overflow in the 
+ *               get_signed_expression() function aka CVE-2019-19787
+ *               Fixed stacked-base buffer overflow in the parse_expr()
+ *               function, aka  CVE-2019-19786
  *==========================================================================*
  * TODO
  *   indepth testing of .IF,.ELSE,.ENDIF (signal error on mismatches?)
@@ -184,6 +189,8 @@ memBank *get_bank(int id, int sym_id) {
       return walk;
     else if ((walk->nxt)&&(walk->nxt->id>id)) {
       bank=(memBank *)malloc(sizeof(memBank));
+      if (!bank)
+          return NULL;
       bank->nxt=walk->nxt;
       break;
     }
@@ -284,7 +291,13 @@ int open_file(char *fname) {
   char buf[256];
 
   fnew=(file_stack *)malloc(sizeof(file_stack));
+  if (!fnew) {
+    error("Out of memory allocating filename", 1);
+  }
   fnew->name=(char *)malloc(strlen(fname)+1);
+  if (!fnew->name) {
+      error("Out of memory allocating filename", 1);
+  }
   strcpy(fnew->name,fname);
 
   fnew->in = fopen_include(includes, fname, 0);
@@ -784,12 +797,22 @@ short get_immediate(char *str) {
 
   inserts a label into the symbol table, also handles equates
 
+  PH: Lots of assemblers end a label in a :
+      Added option to kill the : and make it a valid label definition
+
   TODO add local labels
  *=========================================================================*/
 int add_label(char *label) {
   symbol *sym;
   char *str,num[32];
   int v;
+
+  /* If the last char of a label is a : then remove it*/
+  int labelLength = strlen(label);
+  if (*(label + labelLength-1) == ':')
+  {
+      *(label + labelLength-1) = 0;
+  }
 
   if (!strcmp(label,"A")) {
     error("'A' is a reserved operand.",1);
@@ -829,6 +852,9 @@ int add_label(char *label) {
       /* Create new name... */
       free(sym->name);
       sym->name=malloc(strlen(label)+strlen(invoked->orig->name)+10);
+      if (!sym->name) {
+        error("Cannot allocate memory for label during macro instantiation.", 1);
+      }
       sprintf(sym->name,"=%.4x_%s=%s",invoked->orig->times,invoked->orig->name,label);
       sym->macroShadow=strchr(sym->name+1,'=')+1;
 
@@ -842,6 +868,9 @@ int add_label(char *label) {
         if (!findsym(label)) {
           symbol *nsym=get_sym();
           nsym->name=(char *)malloc(strlen(label)+1);
+          if (!nsym->name) {
+            error("Cannot allocate room for macro during macro instantiation.", 1);
+          }
           strcpy(nsym->name,label);
           nsym->tp=MACROL;
           nsym->addr=pc;
@@ -1147,7 +1176,7 @@ int to_comma(char *in, char *out) {
  *=========================================================================*/
 int do_float() {
   char *str,*look;
-  char buf[80];
+  char buf[256];
   int d,c,p;
 
   str=get_nxt_word(1);
@@ -1208,7 +1237,7 @@ int do_float() {
  *=========================================================================*/
 int do_xword(int tp) {
   char *str,*look;
-  char buf[80];
+  char buf[256];
   unsigned short add, a;
   int d,c,p;
 
@@ -1299,7 +1328,7 @@ int do_xword(int tp) {
  *=========================================================================*/
 int do_xbyte(int tp) {
   char *str,*look;
-  char buf[80];
+  char buf[256];
   unsigned char add,cb,hi;
   short a;
   int d,i,p,c;
@@ -1347,7 +1376,7 @@ int do_xbyte(int tp) {
       d=to_comma(look,buf);
       look=look+d;
       d=strlen(buf)-1;
-      if ((((d<0)||(buf[0]!=34))&&(buf[d]!=34))||
+      if ((d>255)||(((d<0)||(buf[0]!=34))&&(buf[d]!=34))||
           ((d>0)&&(buf[0]==34)&&(buf[d]!=34))) {
         error("Malformed string.",1);
       } else {
@@ -1466,7 +1495,7 @@ int incbin(char *fname) {
   }
   v=verbose;
   verbose=0;
-  while(!feof(in)) {
+  while((in)&&(!feof(in))) {
     b=fgetc(in);
     if (!feof(in)) {
       if (pass)
